@@ -51,10 +51,10 @@ This system manages a fleet of autonomous vehicles operating across **two primar
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                  AV FLEET MANAGEMENT SYSTEM                      │
-│                 PHX + LA + GLOBAL Architecture                   │
+│                  AV FLEET MANAGEMENT SYSTEM                     │
+│                 PHX + LA + GLOBAL Architecture                  │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
+│                                                                 │
 │  ┌──────────────────┐       ┌──────────────────┐                │
 │  │  PHOENIX REGION  │       │      LA REGION   │                │
 │  │   (3 nodes)      │       │     (3 nodes)    │                │
@@ -65,22 +65,22 @@ This system manages a fleet of autonomous vehicles operating across **two primar
 │  └──────────────────┘       └──────────────────┘                │
 │    Port: 27017-27019          Port: 27020-27022                 │
 │    Data: 5,020 rides          Data: 5,010 rides                 │
-│          (Phoenix only)              (LA only)                   │
-│                │                         │                        │
-│                └─────────┬───────────────┘                        │
-│                          │                                        │
-│                          ▼ Change Streams                         │
-│                 ┌──────────────────┐                             │
-│                 │  GLOBAL REGION   │                             │
-│                 │    (3 nodes)     │                             │
-│                 ├──────────────────┤                             │
-│                 │ mongodb-global-1 │                             │
-│                 │ mongodb-global-2 │                             │
-│                 │ mongodb-global-3 │                             │
-│                 └──────────────────┘                             │
-│                   Port: 27023-27025                              │
-│                   Data: 10,030 rides                             │
-│                   (ALL rides - READ-ONLY)                        │
+│          (Phoenix only)              (LA only)                  │
+│                │                         │                      │
+│                └─────────┬───────────────┘                      │
+│                          │                                      │
+│                          ▼ Change Streams                       │
+│                 ┌──────────────────┐                            │
+│                 │  GLOBAL REGION   │                            │
+│                 │    (3 nodes)     │                            │
+│                 ├──────────────────┤                            │
+│                 │ mongodb-global-1 │                            │
+│                 │ mongodb-global-2 │                            │
+│                 │ mongodb-global-3 │                            │
+│                 └──────────────────┘                            │
+│                   Port: 27023-27025                             │
+│                   Data: 10,030 rides                            │
+│                   (ALL rides - READ-ONLY)                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
