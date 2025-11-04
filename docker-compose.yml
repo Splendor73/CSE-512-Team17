@@ -1,0 +1,211 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # PHOENIX REGION (3 nodes)
+  # Stores Phoenix rides only
+  # ============================================
+  mongodb-phx-1:
+    image: mongo:7.0
+    container_name: mongodb-phx-1
+    command: mongod --replSet rs-phoenix --port 27017 --bind_ip_all
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-phx-1-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb-phx-2:
+    image: mongo:7.0
+    container_name: mongodb-phx-2
+    command: mongod --replSet rs-phoenix --port 27017 --bind_ip_all
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb-phx-2-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb-phx-3:
+    image: mongo:7.0
+    container_name: mongodb-phx-3
+    command: mongod --replSet rs-phoenix --port 27017 --bind_ip_all
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongodb-phx-3-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # LOS ANGELES REGION (3 nodes)
+  # Stores LA rides only
+  # ============================================
+  mongodb-la-1:
+    image: mongo:7.0
+    container_name: mongodb-la-1
+    command: mongod --replSet rs-la --port 27017 --bind_ip_all
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongodb-la-1-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb-la-2:
+    image: mongo:7.0
+    container_name: mongodb-la-2
+    command: mongod --replSet rs-la --port 27017 --bind_ip_all
+    ports:
+      - "27021:27017"
+    volumes:
+      - mongodb-la-2-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb-la-3:
+    image: mongo:7.0
+    container_name: mongodb-la-3
+    command: mongod --replSet rs-la --port 27017 --bind_ip_all
+    ports:
+      - "27022:27017"
+    volumes:
+      - mongodb-la-3-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # GLOBAL REGION (3 nodes)
+  # READ-ONLY replica with ALL rides (PHX + LA)
+  # Synchronized via Change Streams
+  # ============================================
+  mongodb-global-1:
+    image: mongo:7.0
+    container_name: mongodb-global-1
+    command: mongod --replSet rs-global --port 27017 --bind_ip_all
+    ports:
+      - "27023:27017"
+    volumes:
+      - mongodb-global-1-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb-global-2:
+    image: mongo:7.0
+    container_name: mongodb-global-2
+    command: mongod --replSet rs-global --port 27017 --bind_ip_all
+    ports:
+      - "27024:27017"
+    volumes:
+      - mongodb-global-2-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb-global-3:
+    image: mongo:7.0
+    container_name: mongodb-global-3
+    command: mongod --replSet rs-global --port 27017 --bind_ip_all
+    ports:
+      - "27025:27017"
+    volumes:
+      - mongodb-global-3-data:/data/db
+    networks:
+      - av-fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  av-fleet-network:
+    driver: bridge
+    name: av-fleet-network
+
+volumes:
+  mongodb-phx-1-data:
+  mongodb-phx-2-data:
+  mongodb-phx-3-data:
+  mongodb-la-1-data:
+  mongodb-la-2-data:
+  mongodb-la-3-data:
+  mongodb-global-1-data:
+  mongodb-global-2-data:
+  mongodb-global-3-data:

@@ -1,0 +1,26 @@
+# ============================================
+# Autonomous Vehicle Fleet Management System
+# Python Dependencies
+# ============================================
+
+# Database
+pymongo==4.6.0              # MongoDB driver for Python
+motor==3.3.2                # Async MongoDB driver (for FastAPI)
+
+# Web Framework (for Phase 2)
+fastapi==0.104.1            # Modern web framework for APIs
+uvicorn[standard]==0.24.0   # ASGI server for FastAPI
+pydantic==2.5.0             # Data validation
+python-multipart==0.0.6     # Form data parsing
+
+# Data Generation
+Faker==20.1.0               # Synthetic data generation
+
+# Testing (for Phase 2)
+pytest==7.4.3               # Testing framework
+pytest-asyncio==0.21.1      # Async testing
+httpx==0.25.2               # HTTP client for API testing
+locust==2.17.0              # Load testing
+
+# Utilities
+python-dotenv==1.0.0        # Environment variable management
