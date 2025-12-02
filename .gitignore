@@ -27,6 +27,9 @@ ENV/
 env/
 .venv
 
+# Docs
+CODEBASE_EXPLANATION.md
+
 # Conda
 .conda/
 *.conda
