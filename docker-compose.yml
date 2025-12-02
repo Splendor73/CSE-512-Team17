@@ -194,6 +194,57 @@ services:
       timeout: 5s
       retries: 3
 
+  # ============================================
+  # APPLICATION SERVICES
+  # ============================================
+
+  coordinator:
+    build: .
+    container_name: coordinator
+    command: uvicorn services.coordinator:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI_GLOBAL=mongodb://mongodb-global-1:27017,mongodb-global-2:27017,mongodb-global-3:27017/?replicaSet=rs-global
+    depends_on:
+      - mongodb-global-1
+      - mongodb-global-2
+      - mongodb-global-3
+    networks:
+      - av-fleet-network
+
+  phoenix-api:
+    build: .
+    container_name: phoenix-api
+    command: uvicorn services.phoenix_api:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URI_PHX=mongodb://mongodb-phx-1:27017,mongodb-phx-2:27017,mongodb-phx-3:27017/?replicaSet=rs-phoenix
+      - REGION_NAME=Phoenix
+    depends_on:
+      - mongodb-phx-1
+      - mongodb-phx-2
+      - mongodb-phx-3
+    networks:
+      - av-fleet-network
+
+  la-api:
+    build: .
+    container_name: la-api
+    command: uvicorn services.la_api:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    environment:
+      - MONGO_URI_LA=mongodb://mongodb-la-1:27017,mongodb-la-2:27017,mongodb-la-3:27017/?replicaSet=rs-la
+      - REGION_NAME=Los Angeles
+    depends_on:
+      - mongodb-la-1
+      - mongodb-la-2
+      - mongodb-la-3
+    networks:
+      - av-fleet-network
+
 networks:
   av-fleet-network:
     driver: bridge
