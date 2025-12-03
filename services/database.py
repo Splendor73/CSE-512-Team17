@@ -34,13 +34,13 @@ class DatabaseManager:
                 "MONGO_URI_PHX",
                 "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs-phoenix"
             )
-            self.db_name = "av_fleet_phoenix"
+            self.db_name = "av_fleet"
         elif region == "Los Angeles":
             self.mongo_uri = os.getenv(
                 "MONGO_URI_LA",
                 "mongodb://localhost:27020,localhost:27021,localhost:27022/?replicaSet=rs-la"
             )
-            self.db_name = "av_fleet_la"
+            self.db_name = "av_fleet"
         else:
             raise ValueError(f"Invalid region: {region}. Must be 'Phoenix' or 'Los Angeles'")
 
@@ -117,13 +117,13 @@ class DatabaseManager:
 
     def get_rides_collection(self):
         """Get rides collection"""
-        if not self.db:
+        if self.db is None:
             raise RuntimeError("Database not connected")
         return self.db.rides
 
     def get_transactions_collection(self):
         """Get transactions collection for 2PC"""
-        if not self.db:
+        if self.db is None:
             raise RuntimeError("Database not connected")
         return self.db.transactions
 
@@ -169,12 +169,12 @@ class GlobalDatabaseManager:
 
     def get_rides_collection(self):
         """Get global rides collection"""
-        if not self.db:
+        if self.db is None:
             raise RuntimeError("Database not connected")
         return self.db.rides
 
     def get_transactions_collection(self):
         """Get global transactions collection"""
-        if not self.db:
+        if self.db is None:
             raise RuntimeError("Database not connected")
         return self.db.transactions

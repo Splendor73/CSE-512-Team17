@@ -151,7 +151,10 @@ async def get_ride(ride_id: str):
 
 @app.get("/rides", response_model=List[RideResponse])
 async def list_rides(
-    status_filter: Optional[str] = None,
+    city: Optional[str] = None,
+    min_fare: Optional[float] = None,
+    max_fare: Optional[float] = None,
+    status: Optional[str] = None,
     limit: int = 100,
     skip: int = 0
 ):
@@ -161,8 +164,18 @@ async def list_rides(
 
         # Build query
         query = {}
-        if status_filter:
-            query["status"] = status_filter
+        if city:
+            query["city"] = city
+        if status:
+            query["status"] = status
+        
+        # Fare range query
+        if min_fare is not None or max_fare is not None:
+            query["fare"] = {}
+            if min_fare is not None:
+                query["fare"]["$gte"] = min_fare
+            if max_fare is not None:
+                query["fare"]["$lte"] = max_fare
 
         # Execute query
         cursor = rides_collection.find(query).skip(skip).limit(limit)

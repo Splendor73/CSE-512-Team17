@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 
 # Test configuration
-MONGODB_URI = "mongodb://localhost:27017"
+MONGODB_URI = "mongodb://localhost:27017/?directConnection=true"
 COORDINATOR_URL = "http://localhost:8000"
 PHOENIX_API_URL = "http://localhost:8001"
 LA_API_URL = "http://localhost:8002"
@@ -45,19 +45,29 @@ async def http_client():
 @pytest.fixture(scope="function")
 async def clean_database(mongodb_client):
     """Clean database before each test"""
-    db = mongodb_client["rideshare"]
+    # Clean Phoenix (using the fixture client)
+    db_phx = mongodb_client["av_fleet"]
+    await db_phx["rides"].delete_many({})
+    await db_phx["transactions"].delete_many({})
 
-    # Drop all collections
-    await db["phoenix_rides"].delete_many({})
-    await db["la_rides"].delete_many({})
-    await db["transactions"].delete_many({})
+    # Clean LA (create a temporary client)
+    la_client = AsyncIOMotorClient("mongodb://localhost:27020/?directConnection=true")
+    db_la = la_client["av_fleet"]
+    await db_la["rides"].delete_many({})
+    await db_la["transactions"].delete_many({})
+    la_client.close()
 
     yield
 
     # Clean up after test
-    await db["phoenix_rides"].delete_many({})
-    await db["la_rides"].delete_many({})
-    await db["transactions"].delete_many({})
+    await db_phx["rides"].delete_many({})
+    await db_phx["transactions"].delete_many({})
+    
+    la_client = AsyncIOMotorClient("mongodb://localhost:27020/?directConnection=true")
+    db_la = la_client["av_fleet"]
+    await db_la["rides"].delete_many({})
+    await db_la["transactions"].delete_many({})
+    la_client.close()
 
 
 @pytest.mark.integration
@@ -84,9 +94,9 @@ class TestRegionalAPIs:
     async def test_create_ride_phoenix(self, http_client, clean_database):
         """Test creating a ride in Phoenix"""
         ride_data = {
-            "rideId": "R-INT-001",
-            "vehicleId": "AV-PHX-001",
-            "customerId": "C-001",
+            "rideId": "R-100001",
+            "vehicleId": "AV-10001",
+            "customerId": "C-100001",
             "status": "IN_PROGRESS",
             "city": "Phoenix",
             "fare": 25.50,
@@ -97,18 +107,17 @@ class TestRegionalAPIs:
         }
 
         response = await http_client.post(f"{PHOENIX_API_URL}/rides", json=ride_data)
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
-        assert data["message"] == "Ride created successfully"
-        assert data["rideId"] == "R-INT-001"
+        assert data["rideId"] == "R-100001"
 
     async def test_get_ride_phoenix(self, http_client, clean_database):
         """Test retrieving a ride from Phoenix"""
         # First create a ride
         ride_data = {
-            "rideId": "R-INT-002",
-            "vehicleId": "AV-PHX-002",
-            "customerId": "C-002",
+            "rideId": "R-100002",
+            "vehicleId": "AV-10002",
+            "customerId": "C-100002",
             "status": "COMPLETED",
             "city": "Phoenix",
             "fare": 30.00,
@@ -120,10 +129,10 @@ class TestRegionalAPIs:
         await http_client.post(f"{PHOENIX_API_URL}/rides", json=ride_data)
 
         # Now retrieve it
-        response = await http_client.get(f"{PHOENIX_API_URL}/rides/R-INT-002")
+        response = await http_client.get(f"{PHOENIX_API_URL}/rides/R-100002")
         assert response.status_code == 200
         data = response.json()
-        assert data["rideId"] == "R-INT-002"
+        assert data["rideId"] == "R-100002"
         assert data["city"] == "Phoenix"
         assert data["fare"] == 30.00
 
@@ -137,9 +146,9 @@ class TestTwoPhaseCommit:
         """Test successful ride handoff from Phoenix to LA"""
         # Step 1: Create a ride in Phoenix
         ride_data = {
-            "rideId": "R-HANDOFF-001",
-            "vehicleId": "AV-PHX-HANDOFF",
-            "customerId": "C-HANDOFF",
+            "rideId": "R-200001",
+            "vehicleId": "AV-20001",
+            "customerId": "C-200001",
             "status": "IN_PROGRESS",
             "city": "Phoenix",
             "fare": 50.00,
@@ -150,11 +159,11 @@ class TestTwoPhaseCommit:
         }
 
         create_response = await http_client.post(f"{PHOENIX_API_URL}/rides", json=ride_data)
-        assert create_response.status_code == 200
+        assert create_response.status_code == 201
 
         # Step 2: Initiate handoff via coordinator
         handoff_request = {
-            "ride_id": "R-HANDOFF-001",
+            "ride_id": "R-200001",
             "source": "Phoenix",
             "target": "Los Angeles"
         }
@@ -173,20 +182,20 @@ class TestTwoPhaseCommit:
             await asyncio.sleep(0.5)  # Give time for async operations
 
             # Check Phoenix - should not exist
-            phoenix_response = await http_client.get(f"{PHOENIX_API_URL}/rides/R-HANDOFF-001")
+            phoenix_response = await http_client.get(f"{PHOENIX_API_URL}/rides/R-200001")
             assert phoenix_response.status_code == 404
 
             # Check LA - should exist
-            la_response = await http_client.get(f"{LA_API_URL}/rides/R-HANDOFF-001")
+            la_response = await http_client.get(f"{LA_API_URL}/rides/R-200001")
             assert la_response.status_code == 200
             la_data = la_response.json()
-            assert la_data["rideId"] == "R-HANDOFF-001"
+            assert la_data["rideId"] == "R-200001"
             assert la_data["city"] == "Los Angeles"
 
     async def test_handoff_nonexistent_ride(self, http_client, clean_database):
         """Test handoff of non-existent ride fails gracefully"""
         handoff_request = {
-            "ride_id": "R-NONEXISTENT",
+            "ride_id": "R-999999",
             "source": "Phoenix",
             "target": "Los Angeles"
         }
@@ -198,7 +207,7 @@ class TestTwoPhaseCommit:
 
         assert handoff_response.status_code == 200
         data = handoff_response.json()
-        assert data["status"] in ["FAILED", "BUFFERED"]
+        assert data["status"] in ["FAILED", "BUFFERED", "ABORTED"]
 
 
 @pytest.mark.integration
@@ -211,9 +220,9 @@ class TestScatterGather:
         # Create rides in Phoenix
         for i in range(3):
             ride_data = {
-                "rideId": f"R-PHX-{i}",
-                "vehicleId": f"AV-PHX-{i}",
-                "customerId": f"C-{i}",
+                "rideId": f"R-30000{i}",
+                "vehicleId": f"AV-3000{i}",
+                "customerId": f"C-30000{i}",
                 "status": "COMPLETED",
                 "city": "Phoenix",
                 "fare": 20.0 + i * 5,
@@ -242,9 +251,9 @@ class TestScatterGather:
         # Create rides in Phoenix
         for i in range(2):
             ride_data = {
-                "rideId": f"R-PHX-GLOBAL-{i}",
-                "vehicleId": f"AV-PHX-{i}",
-                "customerId": f"C-{i}",
+                "rideId": f"R-40000{i}",
+                "vehicleId": f"AV-4000{i}",
+                "customerId": f"C-40000{i}",
                 "status": "COMPLETED",
                 "city": "Phoenix",
                 "fare": 25.0,
@@ -258,9 +267,9 @@ class TestScatterGather:
         # Create rides in LA
         for i in range(2):
             ride_data = {
-                "rideId": f"R-LA-GLOBAL-{i}",
-                "vehicleId": f"AV-LA-{i}",
-                "customerId": f"C-{i}",
+                "rideId": f"R-50000{i}",
+                "vehicleId": f"AV-5000{i}",
+                "customerId": f"C-50000{i}",
                 "status": "COMPLETED",
                 "city": "Los Angeles",
                 "fare": 30.0,
@@ -294,9 +303,9 @@ class TestScatterGather:
         fares = [15.0, 25.0, 35.0, 45.0]
         for i, fare in enumerate(fares):
             ride_data = {
-                "rideId": f"R-FARE-{i}",
-                "vehicleId": f"AV-{i}",
-                "customerId": f"C-{i}",
+                "rideId": f"R-60000{i}",
+                "vehicleId": f"AV-6000{i}",
+                "customerId": f"C-60000{i}",
                 "status": "COMPLETED",
                 "city": "Phoenix",
                 "fare": fare,

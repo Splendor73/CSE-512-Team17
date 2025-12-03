@@ -35,7 +35,8 @@ fi
 echo -e "${YELLOW}Running unit tests with coverage...${NC}"
 echo ""
 
-pytest tests/ \
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+python -m pytest tests/ \
     --cov=services \
     --cov-report=term-missing \
     --cov-report=html \

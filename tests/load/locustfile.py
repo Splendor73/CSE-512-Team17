@@ -5,15 +5,17 @@ Load Testing with Locust
 This file defines load test scenarios for the rideshare system.
 
 Usage:
-    # Test single Regional API
-    locust -f tests/load/locustfile.py --host http://localhost:8001
+    # Test Regional API only (recommended)
+    locust -f tests/load/locustfile.py RegionalAPIUser --host http://localhost:8001 \
+        --users 100 --spawn-rate 10 --run-time 60s --headless
 
-    # Test with 1000 users
+    # Test Coordinator only
+    locust -f tests/load/locustfile.py CoordinatorUser --host http://localhost:8000 \
+        --users 100 --spawn-rate 10 --run-time 60s --headless
+
+    # Test both (advanced - requires proper host configuration)
     locust -f tests/load/locustfile.py --host http://localhost:8001 \
-        --users 1000 --spawn-rate 10 --run-time 60s --headless
-
-    # Test Coordinator
-    locust -f tests/load/locustfile.py RegionalAPIUser --host http://localhost:8000
+        --users 100 --spawn-rate 10 --run-time 60s --headless
 
 Prerequisites:
     pip install locust
@@ -25,9 +27,9 @@ import random
 import json
 
 
-# Sample data generators
-VEHICLE_IDS = [f"AV-PHX-{i:03d}" for i in range(1, 101)]
-CUSTOMER_IDS = [f"C-{i:04d}" for i in range(1, 1001)]
+# Sample data generators - using valid ID formats matching regex patterns
+VEHICLE_IDS = [f"AV-{i}" for i in range(1000, 1101)]  # AV-1000 to AV-1100 (matches ^AV-\d+$)
+CUSTOMER_IDS = [f"C-{i}" for i in range(10000, 11001)]  # C-10000 to C-11000 (matches ^C-\d+$)
 CITIES = ["Phoenix", "Los Angeles"]
 
 # Phoenix coordinates
@@ -41,7 +43,7 @@ LA_LONS = [-118.3 + random.random() * 0.2 for _ in range(100)]
 
 def generate_ride_data(city="Phoenix"):
     """Generate random ride data"""
-    ride_id = f"R-LOAD-{random.randint(100000, 999999)}"
+    ride_id = f"R-{random.randint(100000, 999999)}"  # R-123456 (matches ^R-\d+$)
 
     if city == "Phoenix":
         lat = random.choice(PHX_LATS)
@@ -85,7 +87,7 @@ class RegionalAPIUser(HttpUser):
             catch_response=True,
             name="POST /rides"
         ) as response:
-            if response.status_code == 200:
+            if response.status_code in [200, 201]:
                 response.success()
             else:
                 response.failure(f"Failed: {response.status_code}")

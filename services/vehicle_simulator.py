@@ -55,24 +55,41 @@ LON_DEGREE_KM = 85.0   # 1 degree longitude ≈ 85 km (at ~34°N)
 class Vehicle:
     """Represents a single autonomous vehicle"""
 
-    def __init__(self, vehicle_id: str, start_region: str):
+    def __init__(self, vehicle_id: str, start_region: str, force_boundary_crossing: bool = False):
         self.vehicle_id = vehicle_id
         self.region = start_region
         self.ride_id = None
-        self.customer_id = f"C-SIM-{random.randint(1000, 9999)}"
+        self.customer_id = f"C-{random.randint(100000, 999999)}"
         self.status = "IDLE"
 
         # Starting location
-        if start_region == "Phoenix":
-            self.lat = PHOENIX_CENTER[0] + random.uniform(-0.2, 0.2)
-            self.lon = PHOENIX_CENTER[1] + random.uniform(-0.2, 0.2)
-            self.destination_lat = BOUNDARY_LAT + random.uniform(0.1, 0.3)  # Cross boundary
-            self.destination_lon = LA_CENTER[1] + random.uniform(-0.2, 0.2)
-        else:  # Los Angeles
-            self.lat = LA_CENTER[0] + random.uniform(-0.2, 0.2)
-            self.lon = LA_CENTER[1] + random.uniform(-0.2, 0.2)
-            self.destination_lat = BOUNDARY_LAT - random.uniform(0.1, 0.3)  # Cross boundary
-            self.destination_lon = PHOENIX_CENTER[1] + random.uniform(-0.2, 0.2)
+        if force_boundary_crossing:
+            # Force vehicles to start VERY close to boundary (50% of vehicles)
+            # This GUARANTEES boundary crossings within 10-20 seconds at 80 km/h
+            if start_region == "Phoenix":
+                # Start 0.5-1km south of boundary (33.795-33.799), heading straight north
+                self.lat = BOUNDARY_LAT - random.uniform(0.005, 0.009)  # 0.5-1km south
+                self.lon = -115.0 + random.uniform(-0.2, 0.2)  # Between Phoenix & LA longitude
+                self.destination_lat = BOUNDARY_LAT + 0.5  # Well into LA (50km north)
+                self.destination_lon = self.lon  # Straight north!
+            else:  # Los Angeles
+                # Start 0.5-1km north of boundary (33.801-33.805), heading straight south
+                self.lat = BOUNDARY_LAT + random.uniform(0.005, 0.009)  # 0.5-1km north
+                self.lon = -115.0 + random.uniform(-0.2, 0.2)  # Between Phoenix & LA longitude
+                self.destination_lat = BOUNDARY_LAT - 0.5  # Well into Phoenix (50km south)
+                self.destination_lon = self.lon  # Straight south!
+        else:
+            # Normal starting positions (50% of vehicles) - stay within region
+            if start_region == "Phoenix":
+                self.lat = PHOENIX_CENTER[0] + random.uniform(-0.2, 0.2)
+                self.lon = PHOENIX_CENTER[1] + random.uniform(-0.2, 0.2)
+                self.destination_lat = PHOENIX_CENTER[0] + random.uniform(-0.2, 0.2)  # Stay in Phoenix
+                self.destination_lon = PHOENIX_CENTER[1] + random.uniform(-0.2, 0.2)
+            else:  # Los Angeles
+                self.lat = LA_CENTER[0] + random.uniform(-0.2, 0.2)
+                self.lon = LA_CENTER[1] + random.uniform(-0.2, 0.2)
+                self.destination_lat = LA_CENTER[0] + random.uniform(-0.2, 0.2)  # Stay in LA
+                self.destination_lon = LA_CENTER[1] + random.uniform(-0.2, 0.2)
 
         self.start_lat = self.lat
         self.start_lon = self.lon
@@ -84,17 +101,22 @@ class Vehicle:
         # Distance traveled in km
         distance_km = (self.speed_kmh / 3600) * time_delta_seconds
 
-        # Calculate direction vector
+        # Calculate direction vector (in degrees)
         dlat = self.destination_lat - self.lat
         dlon = self.destination_lon - self.lon
-        distance_to_dest = ((dlat * LAT_DEGREE_KM) ** 2 + (dlon * LON_DEGREE_KM) ** 2) ** 0.5
 
-        if distance_to_dest < 0.5:  # Within 500m of destination
+        # Calculate distance to destination in degrees
+        distance_to_dest_degrees = (dlat ** 2 + dlon ** 2) ** 0.5
+
+        if distance_to_dest_degrees < 0.005:  # Within ~500m of destination
             return self.lat, self.lon  # Stop moving
 
+        # Convert km movement to degrees
+        movement_degrees = distance_km / LAT_DEGREE_KM
+
         # Normalize direction and apply movement
-        lat_movement = (dlat / distance_to_dest) * (distance_km / LAT_DEGREE_KM)
-        lon_movement = (dlon / distance_to_dest) * (distance_km / LON_DEGREE_KM)
+        lat_movement = (dlat / distance_to_dest_degrees) * movement_degrees
+        lon_movement = (dlon / distance_to_dest_degrees) * movement_degrees
 
         new_lat = self.lat + lat_movement
         new_lon = self.lon + lon_movement
@@ -109,14 +131,20 @@ class Vehicle:
         # Calculate new position
         self.lat, self.lon = self.calculate_movement(time_delta_seconds)
 
+        # DEBUG: Log position for boundary vehicles
+        if self.vehicle_id in ["AV-1000", "AV-1001", "AV-1002"]:
+            logger.info(f"DEBUG {self.vehicle_id}: oldLat={old_lat:.4f} newLat={self.lat:.4f} boundary={BOUNDARY_LAT} region={self.region}")
+
         # Check boundary crossing
         if old_region == "Phoenix" and self.lat >= BOUNDARY_LAT and old_lat < BOUNDARY_LAT:
             # Crossed from Phoenix to LA
             self.region = "Los Angeles"
+            logger.info(f"🎯 DEBUG: {self.vehicle_id} CROSSED Phoenix→LA!")
             return True
         elif old_region == "Los Angeles" and self.lat <= BOUNDARY_LAT and old_lat > BOUNDARY_LAT:
             # Crossed from LA to Phoenix
             self.region = "Phoenix"
+            logger.info(f"🎯 DEBUG: {self.vehicle_id} CROSSED LA→Phoenix!")
             return True
 
         return False
@@ -150,15 +178,21 @@ class VehicleSimulator:
         logger.info(f"Creating {self.num_vehicles} vehicles...")
 
         # Create vehicles (50/50 split between regions)
+        # 50% start near boundary heading towards it to GUARANTEE handoffs
+        num_boundary_vehicles = int(self.num_vehicles * 0.5)
+
         for i in range(self.num_vehicles):
             region = "Phoenix" if i % 2 == 0 else "Los Angeles"
-            vehicle = Vehicle(f"AV-SIM-{i:03d}", region)
+            # First 50% are boundary-crossing vehicles
+            force_crossing = i < num_boundary_vehicles
+            vehicle = Vehicle(f"AV-{1000 + i}", region, force_boundary_crossing=force_crossing)
             vehicle.speed_kmh *= self.speed_multiplier
             self.vehicles.append(vehicle)
 
         logger.info(f"✓ Created {len(self.vehicles)} vehicles")
         logger.info(f"  - Phoenix: {sum(1 for v in self.vehicles if v.region == 'Phoenix')}")
         logger.info(f"  - LA:      {sum(1 for v in self.vehicles if v.region == 'Los Angeles')}")
+        logger.info(f"  - Will cross boundary: {num_boundary_vehicles} ({int(num_boundary_vehicles/self.num_vehicles*100)}%)")
 
     async def teardown(self):
         """Cleanup"""
@@ -169,7 +203,7 @@ class VehicleSimulator:
     async def create_ride(self, vehicle: Vehicle):
         """Create a ride for a vehicle"""
         try:
-            ride_id = f"R-SIM-{vehicle.vehicle_id}-{int(datetime.now().timestamp())}"
+            ride_id = f"R-{random.randint(100000, 999999)}"
             vehicle.ride_id = ride_id
             vehicle.status = "IN_PROGRESS"
 
@@ -191,7 +225,7 @@ class VehicleSimulator:
 
             response = await self.http_client.post(f"{api_url}/rides", json=ride_data)
 
-            if response.status_code == 200:
+            if response.status_code in (200, 201):
                 self.stats["rides_created"] += 1
                 logger.info(f"✓ Created ride {ride_id} in {vehicle.region}")
                 return True

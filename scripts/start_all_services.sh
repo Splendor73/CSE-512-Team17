@@ -26,6 +26,15 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Set PYTHONPATH to the project root so that 'services' module can be found
+export PYTHONPATH=$(pwd)
+
+# Explicitly set MongoDB URIs for local execution to override any environment variables
+# that might be set (e.g. if the user has a .env file or docker env vars loaded)
+export MONGO_URI_PHX="mongodb://localhost:27017/?replicaSet=rs-phoenix&directConnection=true"
+export MONGO_URI_LA="mongodb://localhost:27020/?replicaSet=rs-la&directConnection=true"
+export MONGO_URI_GLOBAL="mongodb://localhost:27023/?replicaSet=rs-global&directConnection=true"
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Rideshare System - Starting Services${NC}"
 echo -e "${GREEN}========================================${NC}"
@@ -50,7 +59,7 @@ mkdir -p logs
 # Start Phoenix Regional API
 echo -e "${YELLOW}[2/4] Starting Phoenix Regional API (port 8001)...${NC}"
 cd services
-uvicorn phoenix_api:app --host 0.0.0.0 --port 8001 > ../logs/phoenix_api.log 2>&1 &
+python -m uvicorn phoenix_api:app --host 0.0.0.0 --port 8001 > ../logs/phoenix_api.log 2>&1 &
 PHOENIX_PID=$!
 echo $PHOENIX_PID > ../logs/phoenix_api.pid
 cd ..
@@ -63,7 +72,7 @@ sleep 2
 # Start LA Regional API
 echo -e "${YELLOW}[3/4] Starting Los Angeles Regional API (port 8002)...${NC}"
 cd services
-uvicorn la_api:app --host 0.0.0.0 --port 8002 > ../logs/la_api.log 2>&1 &
+python -m uvicorn la_api:app --host 0.0.0.0 --port 8002 > ../logs/la_api.log 2>&1 &
 LA_PID=$!
 echo $LA_PID > ../logs/la_api.pid
 cd ..
@@ -76,7 +85,7 @@ sleep 2
 # Start Global Coordinator
 echo -e "${YELLOW}[4/4] Starting Global Coordinator (port 8000)...${NC}"
 cd services
-uvicorn coordinator:app --host 0.0.0.0 --port 8000 > ../logs/coordinator.log 2>&1 &
+python -m uvicorn coordinator:app --host 0.0.0.0 --port 8000 > ../logs/coordinator.log 2>&1 &
 COORDINATOR_PID=$!
 echo $COORDINATOR_PID > ../logs/coordinator.pid
 cd ..

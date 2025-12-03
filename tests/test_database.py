@@ -11,18 +11,18 @@ class TestDatabaseManager:
     """Test DatabaseManager initialization and configuration"""
 
     def test_phoenix_initialization(self):
-        """Test Phoenix database manager initialization"""
-        db_mgr = DatabaseManager("Phoenix")
-        assert db_mgr.region == "Phoenix"
-        assert db_mgr.db_name == "av_fleet_phoenix"
-        assert "rs-phoenix" in db_mgr.mongo_uri
+        """Test initialization for Phoenix region"""
+        db_manager = DatabaseManager("Phoenix")
+        assert db_manager.region == "Phoenix"
+        assert db_manager.db_name == "av_fleet"
+        assert "rs-phoenix" in db_manager.mongo_uri
 
     def test_la_initialization(self):
-        """Test LA database manager initialization"""
-        db_mgr = DatabaseManager("Los Angeles")
-        assert db_mgr.region == "Los Angeles"
-        assert db_mgr.db_name == "av_fleet_la"
-        assert "rs-la" in db_mgr.mongo_uri
+        """Test initialization for Los Angeles region"""
+        db_manager = DatabaseManager("Los Angeles")
+        assert db_manager.region == "Los Angeles"
+        assert db_manager.db_name == "av_fleet"
+        assert "rs-la" in db_manager.mongo_uri
 
     def test_invalid_region(self):
         """Test invalid region raises ValueError"""

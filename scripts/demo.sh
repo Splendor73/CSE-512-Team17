@@ -2,13 +2,12 @@
 # =============================================================================
 # Live Demo Script for Professor
 # =============================================================================
-# This script automates the complete demo setup and execution.
+# This script automates the complete demo setup and execution, strictly following
+# the "Step-by-Step Manual Setup" and "Live Demonstrations" sections in 
+# docs/codbase_info.md.
 #
 # Usage:
-#   ./scripts/demo.sh setup     # Prepare system for demo
-#   ./scripts/demo.sh run       # Run the live demo
-#   ./scripts/demo.sh cleanup   # Clean up after demo
-#   ./scripts/demo.sh full      # Run complete demo (setup + run + cleanup)
+#   ./scripts/demo.sh
 # =============================================================================
 
 set -e
@@ -21,10 +20,6 @@ BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
-
-# Demo configuration
-DEMO_RIDES=1000
-DEMO_HANDOFFS=10
 
 demo_header() {
     echo ""
@@ -55,292 +50,304 @@ demo_info() {
 }
 
 wait_for_user() {
-    echo ""
-    read -p "Press ENTER to continue..."
-    echo ""
-}
-
-setup_demo() {
-    demo_header
-    demo_section "DEMO SETUP - Preparing System"
-
-    # 1. Clean up old containers
-    demo_step "Cleaning up old Docker containers..."
-    docker compose down -v 2>/dev/null || true
-    demo_success "Old containers removed"
-
-    # 2. Start MongoDB cluster
-    demo_step "Starting MongoDB cluster (9 containers)..."
-    docker compose up -d
-    demo_success "MongoDB containers started"
-
-    # 3. Wait for containers to be healthy
-    demo_step "Waiting for MongoDB to be ready (30 seconds)..."
-    sleep 30
-    demo_success "MongoDB is ready"
-
-    # 4. Initialize replica sets
-    demo_step "Initializing replica sets (Phoenix, LA, Global)..."
-    bash init-scripts/init-replica-sets.sh > /dev/null 2>&1
-    demo_success "Replica sets initialized"
-
-    # 5. Create schema and indexes
-    demo_step "Creating database schema and indexes..."
-    bash init-scripts/init-sharding.sh > /dev/null 2>&1
-    demo_success "Schema and indexes created"
-
-    # 6. Generate demo data
-    demo_step "Generating demo data ($DEMO_RIDES rides)..."
-    # Temporarily modify generate_data.py for smaller dataset
-    python3 -c "
-import sys
-sys.path.append('.')
-from pymongo import MongoClient
-from datetime import datetime, timezone
-import random
-
-client = MongoClient('mongodb://localhost:27017/?directConnection=true')
-db_phx = client['av_fleet']
-db_la = client['av_fleet']
-
-rides_phx = []
-rides_la = []
-
-for i in range(${DEMO_RIDES}//2):
-    ride_phx = {
-        'rideId': f'R-PHX-{i:05d}',
-        'vehicleId': f'AV-PHX-{i % 50:03d}',
-        'customerId': f'C-{i % 200:04d}',
-        'status': random.choice(['COMPLETED', 'IN_PROGRESS']),
-        'city': 'Phoenix',
-        'fare': round(random.uniform(15, 80), 2),
-        'startLocation': {'lat': 33.4 + random.random()*0.2, 'lon': -112.2 + random.random()*0.2},
-        'currentLocation': {'lat': 33.5 + random.random()*0.2, 'lon': -112.1 + random.random()*0.2},
-        'endLocation': {'lat': 33.5 + random.random()*0.2, 'lon': -112.1 + random.random()*0.2},
-        'timestamp': datetime.now(timezone.utc)
-    }
-    rides_phx.append(ride_phx)
-
-    ride_la = {
-        'rideId': f'R-LA-{i:05d}',
-        'vehicleId': f'AV-LA-{i % 50:03d}',
-        'customerId': f'C-{i % 200:04d}',
-        'status': random.choice(['COMPLETED', 'IN_PROGRESS']),
-        'city': 'Los Angeles',
-        'fare': round(random.uniform(15, 80), 2),
-        'startLocation': {'lat': 34.0 + random.random()*0.2, 'lon': -118.3 + random.random()*0.2},
-        'currentLocation': {'lat': 34.1 + random.random()*0.2, 'lon': -118.2 + random.random()*0.2},
-        'endLocation': {'lat': 34.1 + random.random()*0.2, 'lon': -118.2 + random.random()*0.2},
-        'timestamp': datetime.now(timezone.utc)
-    }
-    rides_la.append(ride_la)
-
-if rides_phx:
-    db_phx.rides.insert_many(rides_phx)
-if rides_la:
-    db_la.rides.insert_many(rides_la)
-
-print(f'Generated {len(rides_phx)} Phoenix rides and {len(rides_la)} LA rides')
-"
-    demo_success "Demo data generated"
-
-    # 7. Start Change Streams sync
-    demo_step "Starting Change Streams synchronization..."
-    python3 init-scripts/setup-change-streams.py > logs/change-streams.log 2>&1 &
-    CHANGE_STREAMS_PID=$!
-    echo $CHANGE_STREAMS_PID > logs/change-streams.pid
-    sleep 3
-    demo_success "Change Streams active (PID: $CHANGE_STREAMS_PID)"
-
-    # 8. Start all services
-    demo_step "Starting Regional APIs and Coordinator..."
-    ./scripts/start_all_services.sh > /dev/null 2>&1
-    demo_success "All services started"
-
-    echo ""
-    demo_success "Demo setup complete!"
-    demo_info "System is ready for demonstration"
-    echo ""
-}
-
-run_demo() {
-    demo_header
-    demo_section "LIVE DEMONSTRATION"
-
-    # Part 1: System Overview
-    demo_section "Part 1: System Architecture Overview"
-    demo_info "Our system consists of:"
-    echo "  • 2 Regional API Services (Phoenix, Los Angeles)"
-    echo "  • 1 Global Coordinator (Two-Phase Commit)"
-    echo "  • 9 MongoDB containers (3 replica sets)"
-    echo "  • Change Streams for real-time synchronization"
-    wait_for_user
-
-    # Part 2: Health Checks
-    demo_section "Part 2: Service Health Checks"
-
-    demo_step "Checking Phoenix API..."
-    curl -s http://localhost:8001/health | python3 -m json.tool
-    demo_success "Phoenix is healthy"
-    echo ""
-
-    demo_step "Checking LA API..."
-    curl -s http://localhost:8002/health | python3 -m json.tool
-    demo_success "LA is healthy"
-    echo ""
-
-    demo_step "Checking Global Coordinator..."
-    curl -s http://localhost:8000/ | python3 -m json.tool
-    demo_success "Coordinator is healthy"
-    wait_for_user
-
-    # Part 3: Regional Statistics
-    demo_section "Part 3: Regional Statistics"
-
-    demo_step "Phoenix Regional Stats:"
-    curl -s http://localhost:8001/stats | python3 -m json.tool
-    echo ""
-
-    demo_step "LA Regional Stats:"
-    curl -s http://localhost:8002/stats | python3 -m json.tool
-    wait_for_user
-
-    # Part 4: Query Demonstrations
-    demo_section "Part 4: Query Coordination (Scatter-Gather)"
-
-    demo_step "Local Query - Phoenix only (fastest):"
-    curl -s -X POST http://localhost:8000/rides/search \
-        -H "Content-Type: application/json" \
-        -d '{"scope":"local","city":"Phoenix","limit":3}' | python3 -m json.tool
-    echo ""
-
-    demo_step "Global-Fast Query - From global replica:"
-    curl -s -X POST http://localhost:8000/rides/search \
-        -H "Content-Type: application/json" \
-        -d '{"scope":"global-fast","limit":3,"min_fare":40}' | python3 -m json.tool
-    echo ""
-
-    demo_step "Global-Live Query - Scatter-gather to all regions:"
-    curl -s -X POST http://localhost:8000/rides/search \
-        -H "Content-Type: application/json" \
-        -d '{"scope":"global-live","limit":5}' | python3 -m json.tool
-    wait_for_user
-
-    # Part 5: Cross-Region Handoff (2PC)
-    demo_section "Part 5: Cross-Region Handoff (Two-Phase Commit)"
-
-    demo_step "Creating a ride in Phoenix that will cross regions..."
-    curl -s -X POST http://localhost:8001/rides \
-        -H "Content-Type: application/json" \
-        -d '{
-            "rideId": "R-DEMO-HANDOFF",
-            "vehicleId": "AV-DEMO",
-            "customerId": "C-DEMO",
-            "status": "IN_PROGRESS",
-            "city": "Phoenix",
-            "fare": 75.50,
-            "startLocation": {"lat": 33.4484, "lon": -112.0740},
-            "currentLocation": {"lat": 33.9, "lon": -112.5},
-            "endLocation": {"lat": 34.0522, "lon": -118.2437},
-            "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S)'Z"
-        }' | python3 -m json.tool
-    echo ""
-
-    demo_step "Verifying ride exists in Phoenix..."
-    curl -s http://localhost:8001/rides/R-DEMO-HANDOFF | python3 -m json.tool
-    echo ""
-
-    wait_for_user
-
-    demo_step "Initiating handoff from Phoenix to Los Angeles (2PC)..."
-    curl -s -X POST http://localhost:8000/handoff \
-        -H "Content-Type: application/json" \
-        -d '{
-            "ride_id": "R-DEMO-HANDOFF",
-            "source": "Phoenix",
-            "target": "Los Angeles"
-        }' | python3 -m json.tool
-    echo ""
-
-    demo_success "Handoff completed!"
-    echo ""
-
-    demo_step "Verifying ride is NOW in Los Angeles..."
-    sleep 1
-    curl -s http://localhost:8002/rides/R-DEMO-HANDOFF | python3 -m json.tool
-    echo ""
-
-    demo_step "Verifying ride was REMOVED from Phoenix..."
-    curl -s http://localhost:8001/rides/R-DEMO-HANDOFF | python3 -m json.tool || echo "  (404 - Ride not found in Phoenix - Expected!)"
-    echo ""
-
-    demo_success "Two-Phase Commit demonstrated successfully!"
-    wait_for_user
-
-    # Part 6: Performance Summary
-    demo_section "Part 6: Performance Highlights"
-
-    demo_info "Key Performance Metrics:"
-    echo "  • Query Latency (P50):        ~20-50 ms"
-    echo "  • Handoff Latency:            ~100-200 ms"
-    echo "  • Write Throughput:           >1,000 writes/sec"
-    echo "  • Failover Time:              4-5 seconds"
-    echo "  • Data Consistency:           100%"
-    echo "  • Duplication Rate:           0%"
-    echo ""
-
-    demo_success "Demo complete!"
-    echo ""
-}
-
-cleanup_demo() {
-    demo_header
-    demo_section "DEMO CLEANUP"
-
-    demo_step "Stopping all services..."
-    ./scripts/stop_all_services.sh > /dev/null 2>&1 || true
-    demo_success "Services stopped"
-
-    demo_step "Stopping Change Streams..."
-    if [ -f logs/change-streams.pid ]; then
-        kill $(cat logs/change-streams.pid) 2>/dev/null || true
-        rm logs/change-streams.pid
-    fi
-    demo_success "Change Streams stopped"
-
-    demo_step "Stopping MongoDB containers..."
-    docker compose down > /dev/null 2>&1 || true
-    demo_success "MongoDB stopped"
-
-    echo ""
-    demo_success "Cleanup complete!"
-    echo ""
-}
-
-# Main script logic
-case "${1:-}" in
-    setup)
-        setup_demo
-        ;;
-    run)
-        run_demo
-        ;;
-    cleanup)
-        cleanup_demo
-        ;;
-    full)
-        setup_demo
-        run_demo
-        cleanup_demo
-        ;;
-    *)
-        echo "Usage: $0 {setup|run|cleanup|full}"
+    if [ "${NON_INTERACTIVE}" != "true" ]; then
         echo ""
-        echo "Commands:"
-        echo "  setup    - Prepare system for demo"
-        echo "  run      - Run the live demo"
-        echo "  cleanup  - Clean up after demo"
-        echo "  full     - Run complete demo (setup + run + cleanup)"
-        exit 1
-        ;;
-esac
+        read -p "Press ENTER to continue..."
+        echo ""
+    else
+        echo ""
+        echo "Continuing (Non-Interactive Mode)..."
+        sleep 2
+        echo ""
+    fi
+}
+
+# =============================================================================
+# Step 1: Start MongoDB Cluster
+# =============================================================================
+demo_header
+demo_section "Step 1: Start MongoDB Cluster"
+demo_info "Testing: Infrastructure Setup"
+demo_info "Goal: Start 9 MongoDB containers (3 replica sets x 3 nodes)."
+
+demo_step "Cleaning up old containers..."
+docker compose down -v 2>/dev/null || true
+
+demo_step "Starting 9 MongoDB containers..."
+docker compose up -d
+
+demo_step "Waiting 30 seconds for MongoDB startup..."
+sleep 30
+
+demo_step "Verifying containers..."
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep mongodb
+demo_success "MongoDB cluster started successfully."
+wait_for_user
+
+# =============================================================================
+# Step 2: Initialize Replica Sets
+# =============================================================================
+demo_section "Step 2: Initialize Replica Sets"
+demo_info "Testing: Fault Tolerance Configuration"
+demo_info "Goal: Configure Raft consensus for automatic failover."
+
+demo_step "Initializing replica sets..."
+bash init-scripts/init-replica-sets.sh
+demo_success "Replica sets initialized."
+wait_for_user
+
+# =============================================================================
+# Step 3: Create Database Schema
+# =============================================================================
+demo_section "Step 3: Create Database Schema"
+demo_info "Testing: Database Design & Indexing"
+demo_info "Goal: Create collections and indexes for performance."
+
+demo_step "Creating schema and indexes..."
+bash init-scripts/init-sharding.sh
+demo_success "Schema and indexes created."
+wait_for_user
+
+# =============================================================================
+# Step 4: Generate Test Data
+# =============================================================================
+demo_section "Step 4: Generate Test Data"
+demo_info "Testing: Data Ingestion"
+demo_info "Goal: Generate 10,030 synthetic rides across regions."
+
+demo_step "Generating 10,030 rides..."
+python3 data-generation/generate_data.py
+demo_success "Data generation complete."
+wait_for_user
+
+# =============================================================================
+# Step 5: Start Change Streams Sync
+# =============================================================================
+demo_section "Step 5: Start Change Streams Sync"
+demo_info "Testing: Real-Time Synchronization"
+demo_info "Goal: Sync Phoenix/LA data to Global replica for analytics."
+
+demo_step "Starting Change Streams..."
+mkdir -p logs
+export NON_INTERACTIVE=true
+python3 init-scripts/setup-change-streams.py > logs/change-streams.log 2>&1 &
+CHANGE_STREAMS_PID=$!
+echo $CHANGE_STREAMS_PID > logs/change-streams.pid
+sleep 3
+demo_success "Change Streams active (PID: $CHANGE_STREAMS_PID)."
+wait_for_user
+
+# =============================================================================
+# Step 6: Start Application Services
+# =============================================================================
+demo_section "Step 6: Start Application Services"
+demo_info "Testing: API & Coordinator Services"
+demo_info "Goal: Start Regional APIs and Global Coordinator."
+
+demo_step "Starting services..."
+./scripts/start_all_services.sh > /dev/null 2>&1
+demo_success "All services started."
+wait_for_user
+
+# =============================================================================
+# Step 7: Verify Everything Works
+# =============================================================================
+demo_section "Step 7: Verify Everything Works"
+demo_info "Testing: System Health & Data Integrity"
+demo_info "Goal: Ensure all components are healthy and data is partitioned."
+
+demo_step "Test 1: Check service health"
+curl -s http://localhost:8001/health | python3 -m json.tool
+curl -s http://localhost:8002/health | python3 -m json.tool
+curl -s http://localhost:8000/ | python3 -m json.tool
+echo ""
+
+demo_step "Test 2: Count rides in each database"
+echo "Phoenix Rides (Expected: 5020):"
+mongosh "mongodb://localhost:27017/av_fleet" --quiet --eval "db.rides.countDocuments({city: 'Phoenix'})"
+echo "LA Rides (Expected: 5010):"
+mongosh "mongodb://localhost:27020/av_fleet" --quiet --eval "db.rides.countDocuments({city: 'Los Angeles'})"
+echo "Global Rides (Expected: 10030):"
+mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "db.rides.countDocuments({})"
+echo ""
+
+demo_step "Test 3: Verify replica set status"
+mongosh --port 27017 --quiet --eval "rs.status().members.forEach(m => print(m.name, '-', m.stateStr))"
+demo_success "System verification complete."
+wait_for_user
+
+# =============================================================================
+# Demo 1: Query Performance
+# =============================================================================
+demo_section "Demo 1: Query Performance (Partitioning)"
+demo_info "Testing: Geographic Partitioning"
+demo_info "Goal: Show that local queries are fast and global queries scan all regions."
+
+demo_step "Local Query - Phoenix only (Fastest):"
+time curl -s -X POST http://localhost:8000/rides/search \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"local","city":"Phoenix","status":"IN_PROGRESS","limit":3}' | python3 -m json.tool
+demo_success "Local query returned results from Phoenix only."
+
+demo_step "Scatter-gather query (all regions):"
+time curl -s -X POST http://localhost:8000/rides/search \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"global-live","status":"IN_PROGRESS","limit":3}' | python3 -m json.tool
+demo_success "Global query returned results from Phoenix AND LA."
+wait_for_user
+
+# =============================================================================
+# Demo 2: Two-Phase Commit
+# =============================================================================
+demo_section "Demo 2: Two-Phase Commit (Atomic Handoff)"
+demo_info "Testing: Atomic Data Transfer"
+demo_info "Goal: Move a ride from Phoenix to LA without duplication or loss."
+
+demo_step "Step 1: Create a ride in Phoenix"
+curl -s -X POST http://localhost:8001/rides \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rideId": "R-888888",
+    "vehicleId": "AV-8888",
+    "customerId": "C-888888",
+    "status": "IN_PROGRESS",
+    "city": "Phoenix",
+    "fare": 75.50,
+    "startLocation": {"lat": 33.4484, "lon": -112.0740},
+    "currentLocation": {"lat": 33.9, "lon": -112.5},
+    "endLocation": {"lat": 34.0522, "lon": -118.2437},
+    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+  }' | python3 -m json.tool
+
+demo_step "Step 2: Verify ride exists in Phoenix"
+curl -s http://localhost:8001/rides/R-888888 | python3 -m json.tool
+
+demo_step "Step 3: Trigger handoff (Phoenix → LA)"
+curl -s -X POST http://localhost:8000/handoff \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ride_id": "R-888888",
+    "source": "Phoenix",
+    "target": "Los Angeles"
+  }' | python3 -m json.tool
+
+demo_step "Step 4: Verify ride is NOW in LA"
+curl -s http://localhost:8002/rides/R-888888 | python3 -m json.tool
+
+demo_step "Step 5: Verify ride was REMOVED from Phoenix"
+curl -s http://localhost:8001/rides/R-888888 | python3 -m json.tool || echo "Ride not found (Expected)"
+
+demo_success "Two-Phase Commit demonstrated successfully."
+wait_for_user
+
+# =============================================================================
+# Demo 3: Automatic Failover
+# =============================================================================
+demo_section "Demo 3: Automatic Failover (Fault Tolerance)"
+demo_info "Testing: Database Replication & Leader Election"
+demo_info "Goal: Show that the system survives a primary node crash."
+
+demo_step "Step 1: Check Phoenix replica set status"
+mongosh --port 27017 --quiet --eval "rs.status().members.forEach(m => print(m.name, '-', m.stateStr))"
+
+demo_step "Step 2: Kill the primary node (simulate server crash)"
+docker stop mongodb-phx-1
+demo_info "Waiting 5 seconds for automatic failover..."
+sleep 5
+
+demo_step "Step 3: Check replica set status again"
+mongosh --port 27018 --quiet --eval "rs.status().members.forEach(m => print(m.name, '-', m.stateStr))"
+
+demo_step "Step 4: Verify Phoenix API still works (auto-reconnected)"
+curl -s http://localhost:8001/health | python3 -m json.tool
+
+demo_step "Step 5: Restart crashed node"
+docker start mongodb-phx-1
+demo_info "Waiting 10 seconds for it to sync..."
+sleep 10
+
+demo_step "Step 6: Check status (phx-1 rejoins as secondary)"
+mongosh --port 27018 --quiet --eval "rs.status().members.forEach(m => print(m.name, '-', m.stateStr))"
+
+demo_success "Automatic failover demonstrated successfully."
+wait_for_user
+
+# =============================================================================
+# Demo 4: Change Streams
+# =============================================================================
+demo_section "Demo 4: Change Streams (Real-Time Sync)"
+demo_info "Testing: Real-Time Synchronization"
+demo_info "Goal: Sync Phoenix/LA data to Global replica for analytics."
+
+demo_step "Step 1: Check Global count before insert"
+mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "db.rides.countDocuments({})"
+
+demo_step "Step 2: Insert a new ride into Phoenix"
+mongosh "mongodb://localhost:27017/av_fleet" --quiet --eval "
+db.rides.insertOne({
+  rideId: 'R-SYNC-TEST-' + Date.now(),
+  vehicleId: 'AV-SYNC',
+  customerId: 'C-SYNC',
+  city: 'Phoenix',
+  status: 'IN_PROGRESS',
+  fare: 30.00,
+  timestamp: new Date(),
+  startLocation: {lat: 33.45, lon: -112.07},
+  currentLocation: {lat: 33.50, lon: -112.10},
+  endLocation: {lat: 33.50, lon: -112.10}
+})
+"
+
+demo_step "Step 3: Wait 2 seconds (Change Streams sync lag)"
+sleep 2
+
+demo_step "Step 4: Check Global count after sync"
+mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "db.rides.countDocuments({})"
+
+demo_step "Step 5: Verify the specific ride exists in Global"
+mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "
+var ride = db.rides.findOne({vehicleId: 'AV-SYNC'});
+if (ride) {
+  print('✅ Ride synced to Global!');
+  print('   RideId:', ride.rideId);
+  print('   City:', ride.city);
+} else {
+  print('❌ Ride not found in Global');
+}
+"
+demo_success "Real-time sync demonstrated successfully."
+wait_for_user
+
+# =============================================================================
+# Demo 5: Vehicle Simulator
+# =============================================================================
+demo_section "Demo 5: Vehicle Simulator (Boundary Crossing & Handoffs)"
+demo_info "Testing: End-to-End System with Live Traffic"
+demo_info "Goal: Simulate 100 autonomous vehicles crossing boundaries (Stress Test)."
+
+demo_step "Running simulator for 60 seconds (100 vehicles)..."
+python3 services/vehicle_simulator.py --vehicles 100 --speed 50 --duration 60
+
+demo_success "Simulation complete."
+wait_for_user
+
+# =============================================================================
+# Shutdown
+# =============================================================================
+demo_section "Shutdown"
+demo_info "Cleaning up resources..."
+
+demo_step "Stopping all services..."
+./scripts/stop_all_services.sh > /dev/null 2>&1 || true
+
+demo_step "Stopping Change Streams..."
+if [ -f logs/change-streams.pid ]; then
+    kill $(cat logs/change-streams.pid) 2>/dev/null || true
+    rm logs/change-streams.pid
+fi
+
+demo_step "Stopping MongoDB containers..."
+docker compose down > /dev/null 2>&1 || true
+
+demo_success "Cleanup complete!"
+echo ""
