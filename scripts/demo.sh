@@ -12,6 +12,13 @@
 
 set -e
 
+# Default to interactive mode unless specified
+if [ "$1" == "--non-interactive" ]; then
+    export NON_INTERACTIVE=true
+else
+    unset NON_INTERACTIVE
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -129,8 +136,7 @@ demo_info "Goal: Sync Phoenix/LA data to Global replica for analytics."
 
 demo_step "Starting Change Streams..."
 mkdir -p logs
-export NON_INTERACTIVE=true
-python3 init-scripts/setup-change-streams.py > logs/change-streams.log 2>&1 &
+NON_INTERACTIVE=true python3 init-scripts/setup-change-streams.py > logs/change-streams.log 2>&1 &
 CHANGE_STREAMS_PID=$!
 echo $CHANGE_STREAMS_PID > logs/change-streams.pid
 sleep 3
@@ -188,6 +194,7 @@ time curl -s -X POST http://localhost:8000/rides/search \
   -H "Content-Type: application/json" \
   -d '{"scope":"local","city":"Phoenix","status":"IN_PROGRESS","limit":3}' | python3 -m json.tool
 demo_success "Local query returned results from Phoenix only."
+wait_for_user
 
 demo_step "Scatter-gather query (all regions):"
 time curl -s -X POST http://localhost:8000/rides/search \
@@ -221,6 +228,7 @@ curl -s -X POST http://localhost:8001/rides \
 
 demo_step "Step 2: Verify ride exists in Phoenix"
 curl -s http://localhost:8001/rides/R-888888 | python3 -m json.tool
+wait_for_user
 
 demo_step "Step 3: Trigger handoff (Phoenix → LA)"
 curl -s -X POST http://localhost:8000/handoff \
@@ -233,6 +241,7 @@ curl -s -X POST http://localhost:8000/handoff \
 
 demo_step "Step 4: Verify ride is NOW in LA"
 curl -s http://localhost:8002/rides/R-888888 | python3 -m json.tool
+wait_for_user
 
 demo_step "Step 5: Verify ride was REMOVED from Phoenix"
 curl -s http://localhost:8001/rides/R-888888 | python3 -m json.tool || echo "Ride not found (Expected)"
@@ -249,6 +258,7 @@ demo_info "Goal: Show that the system survives a primary node crash."
 
 demo_step "Step 1: Check Phoenix replica set status"
 mongosh --port 27017 --quiet --eval "rs.status().members.forEach(m => print(m.name, '-', m.stateStr))"
+wait_for_user
 
 demo_step "Step 2: Kill the primary node (simulate server crash)"
 docker stop mongodb-phx-1
@@ -257,9 +267,11 @@ sleep 5
 
 demo_step "Step 3: Check replica set status again"
 mongosh --port 27018 --quiet --eval "rs.status().members.forEach(m => print(m.name, '-', m.stateStr))"
+wait_for_user
 
 demo_step "Step 4: Verify Phoenix API still works (auto-reconnected)"
 curl -s http://localhost:8001/health | python3 -m json.tool
+wait_for_user
 
 demo_step "Step 5: Restart crashed node"
 docker start mongodb-phx-1
@@ -281,6 +293,7 @@ demo_info "Goal: Sync Phoenix/LA data to Global replica for analytics."
 
 demo_step "Step 1: Check Global count before insert"
 mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "db.rides.countDocuments({})"
+wait_for_user
 
 demo_step "Step 2: Insert a new ride into Phoenix"
 mongosh "mongodb://localhost:27017/av_fleet" --quiet --eval "
@@ -297,12 +310,14 @@ db.rides.insertOne({
   endLocation: {lat: 33.50, lon: -112.10}
 })
 "
+wait_for_user
 
 demo_step "Step 3: Wait 2 seconds (Change Streams sync lag)"
 sleep 2
 
 demo_step "Step 4: Check Global count after sync"
 mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "db.rides.countDocuments({})"
+wait_for_user
 
 demo_step "Step 5: Verify the specific ride exists in Global"
 mongosh "mongodb://localhost:27023/av_fleet" --quiet --eval "
