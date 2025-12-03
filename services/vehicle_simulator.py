@@ -171,6 +171,7 @@ class VehicleSimulator:
             "handoffs_failed": 0,
             "boundary_crossings": 0
         }
+        self.handoff_latencies = []  # Track all handoff latencies for percentile calculation
 
     async def setup(self):
         """Initialize HTTP client and create vehicles"""
@@ -290,6 +291,7 @@ class VehicleSimulator:
                 result = response.json()
                 if result["status"] == "SUCCESS":
                     self.stats["handoffs_successful"] += 1
+                    self.handoff_latencies.append(result['latency_ms'])  # Track latency
                     logger.info(f"✓ HANDOFF SUCCESS: {vehicle.ride_id}")
                     logger.info(f"   TX ID: {result['tx_id']}")
                     logger.info(f"   Latency: {result['latency_ms']:.2f} ms")
@@ -395,6 +397,21 @@ class VehicleSimulator:
             if self.stats['handoffs_triggered'] > 0:
                 success_rate = (self.stats['handoffs_successful'] / self.stats['handoffs_triggered']) * 100
                 logger.info(f"Success Rate:         {success_rate:.1f}%")
+            
+            # Print handoff latency percentiles if any handoffs occurred
+            if self.handoff_latencies:
+                self.handoff_latencies.sort()
+                count = len(self.handoff_latencies)
+                logger.info("")
+                logger.info("HANDOFF LATENCY")
+                logger.info(f"  Min:    {self.handoff_latencies[0]:.2f}ms")
+                logger.info(f"  P50:    {self.handoff_latencies[int(count * 0.50)]:.2f}ms")
+                logger.info(f"  P75:    {self.handoff_latencies[int(count * 0.75)]:.2f}ms")
+                logger.info(f"  P90:    {self.handoff_latencies[int(count * 0.90)]:.2f}ms")
+                logger.info(f"  P95:    {self.handoff_latencies[int(count * 0.95)]:.2f}ms")
+                logger.info(f"  P99:    {self.handoff_latencies[int(count * 0.99)]:.2f}ms")
+                logger.info(f"  Max:    {self.handoff_latencies[-1]:.2f}ms")
+            
             logger.info("="*60)
 
 

@@ -25,7 +25,13 @@ from locust import HttpUser, task, between, events
 from datetime import datetime, timezone
 import random
 import json
+import sys
 
+
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Sample data generators - using valid ID formats matching regex patterns
 VEHICLE_IDS = [f"AV-{i}" for i in range(1000, 1101)]  # AV-1000 to AV-1100 (matches ^AV-\d+$)
@@ -283,12 +289,12 @@ def on_test_stop(environment, **kwargs):
         p95_index = int(count * 0.95)
         p99_index = int(count * 0.99)
 
-        print("\n" + "="*60)
-        print("LATENCY PERCENTILES")
-        print("="*60)
-        print(f"P50 (median): {request_latencies[p50_index]:.2f} ms")
-        print(f"P95:          {request_latencies[p95_index]:.2f} ms")
-        print(f"P99:          {request_latencies[p99_index]:.2f} ms")
-        print(f"Max:          {request_latencies[-1]:.2f} ms")
-        print(f"Min:          {request_latencies[0]:.2f} ms")
-        print("="*60 + "\n")
+        sys.stderr.write("\n" + "="*60 + "\n")
+        sys.stderr.write("LATENCY PERCENTILES\n")
+        sys.stderr.write("="*60 + "\n")
+        sys.stderr.write(f"P50 (median): {request_latencies[p50_index]:.2f} ms\n")
+        sys.stderr.write(f"P95:          {request_latencies[p95_index]:.2f} ms\n")
+        sys.stderr.write(f"P99:          {request_latencies[p99_index]:.2f} ms\n")
+        sys.stderr.write(f"Max:          {request_latencies[-1]:.2f} ms\n")
+        sys.stderr.write(f"Min:          {request_latencies[0]:.2f} ms\n")
+        sys.stderr.write("="*60 + "\n\n")
