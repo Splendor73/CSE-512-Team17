@@ -27,6 +27,9 @@ ENV/
 env/
 .venv
 
+# Docs
+CODEBASE_EXPLANATION.md
+
 # Conda
 .conda/
 *.conda
@@ -49,6 +52,7 @@ env/
 
 # MongoDB
 *.log
+/data/db/
 
 # Docker
 docker-compose.override.yml
@@ -74,5 +78,6 @@ yarn-error.log*
 
 # Project specific
 /data/
-*.json
+benchmark_results.json
 !requirements.txt
+!package.json

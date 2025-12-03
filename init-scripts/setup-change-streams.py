@@ -15,6 +15,7 @@ Features:
 - Multi-threaded: Separate threads for PHX and LA watchers
 """
 
+import os
 from pymongo import MongoClient
 from threading import Thread
 import time
@@ -56,7 +57,11 @@ def initial_sync():
     existing_count = global_db.rides.count_documents({})
     if existing_count > 0:
         print(f"⚠️  Global shard already has {existing_count} rides.")
-        response = input("Do you want to clear and re-sync? (yes/no): ")
+        if os.environ.get("NON_INTERACTIVE"):
+            response = "no"
+        else:
+            response = input("Do you want to clear and re-sync? (yes/no): ")
+        
         if response.lower() == 'yes':
             print("🗑️  Clearing Global shard...")
             global_db.rides.delete_many({})
